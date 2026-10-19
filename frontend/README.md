@@ -5,9 +5,9 @@ The managed frontend of the Restore orders Swell app: the **Orders → Restore o
 - `src/DeletedOrders.tsx`: the page. Search form, grid with selection, sorting by date deleted or date created and 10-row pages, event data panel, restore and its result.
 - `worker/index.ts`: routes `/app-api/*` requests; everything else is served from the built assets.
 - `worker/swell-server.ts`: validates the staff session (and, for POST, a same-origin JSON request), then runs one fixed operation:
-  - `POST /app-api/admin/search` `{ date_from, date_to, not_canceled, page }`: one page of 1000 `order.deleted` events, reduced to orders that have an account and don't exist now, with the shipping (or billing) full name. The page calls it until `done`.
+  - `POST /app-api/admin/search` `{ date_from, date_to, not_canceled, page }`: one page of 1000 `order.deleted` events, reduced to the latest deletion of each order, kept when it has an account and the order doesn't exist now, with the shipping (or billing) full name. `order_ids` lists every order on the page so the page skips older deletions on later pages (`src/search-results.ts`). The page calls it until `done`.
   - `GET /app-api/admin/event?id=`: the full `order.deleted` event.
-  - `POST /app-api/admin/restore` `{ event_ids }`: restores up to 10 orders; the page sends the selection in batches.
+  - `POST /app-api/admin/restore` `{ event_ids }`: restores up to 10 orders, skipping those that exist again; the page sends the selection in batches.
 - `worker/restore.ts`: the search and restore logic over a minimal Swell client.
 
 ## Develop

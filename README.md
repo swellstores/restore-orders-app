@@ -9,7 +9,7 @@ Open **Orders → Restore orders** in the Swell dashboard.
 Choose **Date start** and **Date end** (both days included, in your local time zone) and click **Search**. The app reads the store's `order.deleted` events created in that period and lists the deleted orders:
 
 - An order that exists now (restored or never really gone) is not listed.
-- An order deleted more than once in the period is listed once, from its latest `order.deleted` event.
+- An order deleted more than once in the period is decided by its latest `order.deleted` event in the period: it is listed and restored from that event only, and the filters below apply to that event. An older deletion is never listed instead.
 - Orders without an account (empty `account_id`) are not listed.
 - **Only not canceled** hides orders that were canceled when they were deleted.
 

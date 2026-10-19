@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { adminEvent, adminRestore, adminSearch } from '../worker/swell-server.ts';
+import { mergeSearchPage } from '../src/search-results.ts';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
@@ -110,7 +111,7 @@ for (const [name, body] of [
   });
 }
 
-test('search lists the latest event of each deleted order with an account, with its full name', async () => {
+test('search lists each deleted order by its latest event, when that has an account, with its full name', async () => {
   const events = [
     { id: id(101), date_created: '2026-10-19T10:00:00.000Z', data: { id: id(1), number: '1001', date_created: '2026-10-01T00:00:00.000Z', grand_total: 25.5, currency: 'EUR', account_id: id(51), shipping: { name: ' Ann Lee ' }, billing: { name: 'Billing Name' } } },
     { id: id(102), date_created: '2026-10-18T10:00:00.000Z', data: { id: id(2), number: '1002', grand_total: 10, account_id: id(52) } },
@@ -121,6 +122,9 @@ test('search lists the latest event of each deleted order with an account, with 
     { id: id(107), date_created: '2026-10-13T10:00:00.000Z', data: { id: id(5), number: '1005', account_id: '', shipping: { name: 'Empty Account' } } },
     { id: id(108), date_created: '2026-10-12T10:00:00.000Z', data: { id: id(6), number: '1006', account_id: id(56), shipping: { name: '', first_name: null }, billing: { first_name: 'Cara' } } },
     { id: id(109), date_created: '2026-10-11T10:00:00.000Z', data: { id: id(7), number: '1007', account_id: id(57) } },
+    // latest deletion without an account: the older one with an account is not listed instead
+    { id: id(110), date_created: '2026-10-10T10:00:00.000Z', data: { id: id(8), number: '1008', account_id: null } },
+    { id: id(111), date_created: '2026-10-09T10:00:00.000Z', data: { id: id(8), number: '1008', account_id: id(58) } },
   ];
   const calls = mockPlatform({
     'GET /events': () => ({ count: events.length, results: events }),
@@ -134,7 +138,8 @@ test('search lists the latest event of each deleted order with an account, with 
     grand_total: null, currency: null, account_id: id(orderId + 50), name, canceled: false, ...extra,
   });
   assert.deepEqual(await response.json(), {
-    page: 1, pages: 1, count: 9, done: true,
+    page: 1, pages: 1, count: 11, done: true,
+    order_ids: [1, 2, 3, 4, 5, 6, 7, 8].map(id),
     results: [
       row(101, 1, '1001', '2026-10-19T10:00:00.000Z', 'Ann Lee', { date_created: '2026-10-01T00:00:00.000Z', grand_total: 25.5, currency: 'EUR' }),
       row(104, 3, '1003', '2026-10-16T10:00:00.000Z', 'Bob Stone', { canceled: true }),
@@ -153,16 +158,37 @@ test('search lists the latest event of each deleted order with an account, with 
   assert.deepEqual(inValues(calls.find((call) => call.path === '/orders').url, 'where[id]'), [id(1), id(2), id(3), id(6), id(7)]);
 });
 
-test('search with "only not canceled" filters canceled orders in the events query', async () => {
+test('search with "only not canceled" leaves out orders canceled at their latest deletion', async () => {
+  const event = (eventId, orderId, canceled) => ({
+    id: id(eventId), date_created: `2026-10-1${9 - (eventId % 10)}T10:00:00.000Z`,
+    data: { id: id(orderId), number: `100${orderId}`, account_id: id(50 + orderId), ...(canceled === undefined ? {} : { canceled }) },
+  });
   const calls = mockPlatform({
-    'GET /events': () => ({ count: 2500, results: [] }),
-    'GET /orders': () => { throw new Error('No orders to check'); },
+    'GET /events': () => ({
+      count: 2500,
+      results: [
+        event(101, 1, true), // canceled
+        event(102, 2, false),
+        event(103, 3), // no canceled field
+        event(104, 4, false), // latest deletion not canceled
+        event(105, 4, true),
+        event(106, 5, true), // latest deletion canceled
+        event(107, 5, false),
+      ],
+    }),
+    'GET /orders': () => ({ results: [] }),
   });
   const result = await (await adminSearch(post('/app-api/admin/search', { ...searchBody, not_canceled: true, page: 2 }))).json();
-  assert.deepEqual(result, { page: 2, pages: 3, count: 2500, results: [], done: false });
+  assert.deepEqual(
+    { ...result, results: result.results.map((row) => [row.event_id, row.canceled]) },
+    {
+      page: 2, pages: 3, count: 2500, done: false,
+      results: [[id(102), false], [id(103), false], [id(104), false]], order_ids: [1, 2, 3, 4, 5].map(id),
+    },
+  );
   const eventsUrl = calls.find((call) => call.path === '/events').url;
-  assert.equal(eventsUrl.searchParams.get('where[data.canceled][$ne]'), 'true');
   assert.equal(eventsUrl.searchParams.get('page'), '2');
+  assert.deepEqual(inValues(calls.find((call) => call.path === '/orders').url, 'where[id]'), [id(2), id(3), id(4)]);
 });
 
 test('search failures return safe details without credentials', async () => {
@@ -231,4 +257,15 @@ test('restore posts each deleted order with $restore, skips existing ones and co
     { ...events[id(101)].data, $restore: true },
     { ...events[id(103)].data, $restore: true },
   ]);
+});
+
+test('merged search pages list only the latest deletion of each order in the period', () => {
+  const found = new Map();
+  const seen = new Set();
+  const row = (eventId, orderId) => ({ event_id: id(eventId), order_id: id(orderId) });
+  // page 1 (newest): order 1 listed, order 2 deleted but filtered out (e.g. canceled)
+  mergeSearchPage(found, seen, { results: [row(101, 1)], order_ids: [id(1), id(2)] });
+  // page 2 (older): older deletions of orders 1 and 2 must not be listed; order 3 is new
+  mergeSearchPage(found, seen, { results: [row(201, 1), row(202, 2), row(203, 3)], order_ids: [id(1), id(2), id(3)] });
+  assert.deepEqual([...found.values()], [row(101, 1), row(203, 3)]);
 });

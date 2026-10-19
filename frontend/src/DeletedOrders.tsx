@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react';
+import { mergeSearchPage } from './search-results';
 
 // Shapes returned by the Worker (worker/restore.ts)
 type DeletedOrderRow = {
@@ -13,7 +14,9 @@ type DeletedOrderRow = {
   name: string | null;
   canceled: boolean;
 };
-type SearchPage = { page: number; pages: number; count: number; results: DeletedOrderRow[]; done: boolean };
+type SearchPage = {
+  page: number; pages: number; count: number; results: DeletedOrderRow[]; order_ids: string[]; done: boolean;
+};
 type RestoreResult = {
   event_id: string;
   order_id: string | null;
@@ -119,13 +122,14 @@ export default function DeletedOrders() {
   const [restoring, setRestoring] = useState(false);
   const [restoreResults, setRestoreResults] = useState<RestoreResult[] | null>(null);
 
-  // Reads all pages of deleted events for the query; an order deleted more than once keeps its latest event.
+  // Reads all pages of deleted events for the query; an order deleted more than once is decided by its latest event.
   async function search(next: Query) {
     setQuery(next);
     setStatus('searching');
     setError(null);
     setProgress({ page: 0, pages: 0 });
     const found = new Map<string, DeletedOrderRow>();
+    const seen = new Set<string>();
     try {
       for (let page = 1; ; page++) {
         const result = await call<SearchPage>('/app-api/admin/search', {
@@ -134,9 +138,7 @@ export default function DeletedOrders() {
           not_canceled: next.notCanceled,
           page,
         });
-        for (const row of result.results) {
-          if (!found.has(row.order_id)) found.set(row.order_id, row);
-        }
+        mergeSearchPage(found, seen, result);
         setProgress({ page: result.page, pages: result.pages });
         if (result.done) break;
       }

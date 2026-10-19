@@ -38,7 +38,9 @@ export type DeletedOrderRow = {
 
 export type SearchOptions = { dateFrom: string; dateTo: string; notCanceled: boolean; page: number };
 
-export type SearchPage = { page: number; pages: number; count: number; results: DeletedOrderRow[]; done: boolean };
+export type SearchPage = {
+  page: number; pages: number; count: number; results: DeletedOrderRow[]; order_ids: string[]; done: boolean;
+};
 
 export type RestoreResult = {
   event_id: string;
@@ -119,14 +121,11 @@ function fullName(address: unknown): string | null {
 // don't exist now and have an account. Only the latest event of each order is kept; the caller
 // dedupes across pages.
 export async function searchDeletedOrders(swell: SwellClient, options: SearchOptions): Promise<SearchPage> {
-  const where: Record<string, unknown> = {
-    type: 'order.deleted',
-    date_created: { $gte: options.dateFrom, $lt: options.dateTo },
-  };
-  if (options.notCanceled) where['data.canceled'] = { $ne: true };
-
   const events = await swell.get('/events', {
-    where,
+    where: {
+      type: 'order.deleted',
+      date_created: { $gte: options.dateFrom, $lt: options.dateTo },
+    },
     fields: 'id,date_created,data.id,data.number,data.date_created,data.grand_total,data.currency,data.account_id,data.canceled,' +
       'data.shipping.name,data.shipping.first_name,data.shipping.last_name,data.billing.name,data.billing.first_name,data.billing.last_name',
     sort: 'date_created desc',
@@ -139,11 +138,14 @@ export async function searchDeletedOrders(swell: SwellClient, options: SearchOpt
   const latest = new Map<string, DeletedOrderEvent>();
   for (const event of events?.results || []) {
     const orderId = event.data?.id;
-    if (isObjectId(orderId) && str(event.data?.account_id) && !latest.has(orderId)) latest.set(orderId, event);
+    if (isObjectId(orderId) && !latest.has(orderId)) latest.set(orderId, event);
   }
 
-  const existing = await existingOrderIds(swell, [...latest.keys()]);
-  const deleted = [...latest.values()].filter((event) => !existing.has(event.data!.id!));
+  // filters apply to the latest deletion only: an older one is never listed instead
+  const candidates = [...latest.values()].filter((event) => str(event.data!.account_id)
+    && !(options.notCanceled && event.data!.canceled === true));
+  const existing = await existingOrderIds(swell, candidates.map((event) => event.data!.id!));
+  const deleted = candidates.filter((event) => !existing.has(event.data!.id!));
 
   const results = deleted.map((event): DeletedOrderRow => {
     const data = event.data!;
@@ -161,7 +163,7 @@ export async function searchDeletedOrders(swell: SwellClient, options: SearchOpt
     };
   });
 
-  return { page: options.page, pages, count, results, done: options.page >= pages };
+  return { page: options.page, pages, count, results, order_ids: [...latest.keys()], done: options.page >= pages };
 }
 
 export async function getDeletedOrderEvent(swell: SwellClient, eventId: string): Promise<DeletedOrderEvent> {
