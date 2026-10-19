@@ -130,11 +130,11 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
 }
 
 function failure(err: unknown, swell: { redact(text: string): string } | null, step: string, extra: Record<string, unknown> = {}) {
-  let status = 502;
+  // our own errors (invalid input, not found) are messages for the merchant
+  if (err instanceof RestoreError) return json({ error: err.message }, err.status);
+  const status = 502;
   let details: Record<string, unknown> = { step, ...extra };
-  if (err instanceof RestoreError) {
-    status = err.status;
-  } else if (err instanceof BackendError) {
+  if (err instanceof BackendError) {
     details = { ...err.details, ...extra };
   } else {
     details.exception = err instanceof Error ? `${err.name}: ${err.message}` : String(err);

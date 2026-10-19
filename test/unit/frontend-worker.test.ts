@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { adminEvent, adminRestore, adminSearch } from "../../frontend/worker/swell-server";
-import { mergeSearchPage } from "../../frontend/src/search-results";
+import { mergeSearchPage, sortRows } from "../../frontend/src/search-results";
+import worker from "../../frontend/worker/index";
 
 // The app frontend Worker endpoints that search deleted orders, show their events and restore them for staff.
 
@@ -114,8 +115,27 @@ describe("search", () => {
     ["invalid page", { ...searchBody, page: 0 }],
   ])("rejects %s", async (_name, body) => {
     const fetchMock = noPlatformCalls();
-    expect((await adminSearch(post("/app-api/admin/search", body))).status).toBe(400);
+    const response = await adminSearch(post("/app-api/admin/search", body));
+    expect(response.status).toBe(400);
+    expect(Object.keys(await response.json() as object)).toEqual(["error"]);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("reads page 1 when no page is given and checks orders 100 at a time", async () => {
+    const events = Array.from({ length: 150 }, (_, n) => ({
+      id: id(1000 + n), date_created: "2026-10-19T10:00:00.000Z", data: { id: id(n + 1), account_id: id(5000) },
+    }));
+    const calls = mockPlatform({
+      "GET /events": () => ({ count: events.length, results: events }),
+      "GET /orders": () => ({ results: [] }),
+    });
+    const { page, ...rest } = searchBody;
+    const result = await (await adminSearch(post("/app-api/admin/search", rest))).json() as any;
+    expect(page).toBe(1);
+    expect(result.page).toBe(1);
+    expect(result.results).toHaveLength(150);
+    expect(calls.find((c) => c.path === "/events")!.url.searchParams.get("page")).toBe("1");
+    expect(calls.filter((c) => c.path === "/orders").map((c) => inValues(c.url, "where[id]").length)).toEqual([100, 50]);
   });
 
   it("lists each deleted order by its latest event, when that has an account, with its full name", async () => {
@@ -160,7 +180,7 @@ describe("search", () => {
     expect(eventsUrl.searchParams.get("where[date_created][$gte]")).toBe(searchBody.date_from);
     expect(eventsUrl.searchParams.get("where[date_created][$lt]")).toBe(searchBody.date_to);
     expect(eventsUrl.searchParams.get("where[data.canceled][$ne]")).toBeNull();
-    expect(eventsUrl.searchParams.get("sort")).toBe("date_created desc");
+    expect(eventsUrl.searchParams.get("sort")).toBe("date_created desc, id desc");
     expect(eventsUrl.searchParams.get("fields")).toMatch(/data\.shipping\.name.*data\.billing\.last_name/);
     expect(inValues(calls.find((c) => c.path === "/orders")!.url, "where[id]")).toEqual([1, 2, 3, 6, 7].map((n) => id(n)));
   });
@@ -225,7 +245,9 @@ describe("event", () => {
       [`GET /events/${id(102)}`]: () => ({ id: id(102), type: "account.deleted", data: {} }),
     });
     expect(await (await adminEvent(get(`/app-api/admin/event?id=${id(101)}`))).json()).toEqual(event);
-    expect((await adminEvent(get(`/app-api/admin/event?id=${id(102)}`))).status).toBe(404);
+    const missing = await adminEvent(get(`/app-api/admin/event?id=${id(102)}`));
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({ error: "Deleted order event not found" });
   });
 
   it("rejects invalid ids without contacting the platform", async () => {
@@ -274,5 +296,57 @@ describe("restore", () => {
       { ...events[id(101)].data, $restore: true },
       { ...events[id(103)].data, $restore: true },
     ]);
+  });
+});
+
+describe("restore with refused data", () => {
+  it("reports Swell's validation errors as a failure", async () => {
+    mockPlatform({
+      [`GET /events/${id(101)}`]: () => ({ id: id(101), type: "order.deleted", data: { id: id(1), number: "1001" } }),
+      "GET /orders": () => ({ results: [] }),
+      "POST /orders": () => ({ errors: { items: { code: "REQUIRED", message: "Required" } } }),
+    });
+    const { results } = await (await adminRestore(post("/app-api/admin/restore", { event_ids: [id(101)] }))).json() as any;
+    expect(results).toEqual([{
+      event_id: id(101), order_id: id(1), number: "1001", status: "failed",
+      error: '{"items":{"code":"REQUIRED","message":"Required"}}',
+    }]);
+  });
+});
+
+describe("routing", () => {
+  const assets = { fetch: vi.fn(async () => new Response("page")) };
+  const env = { ASSETS: assets } as any;
+  // the handler is typed for Cloudflare's incoming request; a plain Request is enough here
+  const route = (request: Request) => worker.fetch(request as any, env);
+
+  it("answers unknown app endpoints with 404 and wrong methods with 405", async () => {
+    noPlatformCalls();
+    expect((await route(get("/app-api/admin/other"))).status).toBe(404);
+    expect((await route(get("/app-api/admin/search"))).status).toBe(405);
+    expect((await route(post("/app-api/admin/event", {}))).status).toBe(405);
+    expect(assets.fetch).not.toHaveBeenCalled();
+  });
+
+  it("serves the page from the built assets", async () => {
+    expect(await (await route(get("/"))).text()).toBe("page");
+    expect(assets.fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("sorting", () => {
+  const row = (n: number, created: string | null, deleted: string | null) => ({ n, date_created: created, date_deleted: deleted });
+  const rows = [
+    row(1, "2026-10-01T00:00:00Z", "2026-10-10T00:00:00Z"),
+    row(2, "2026-10-05T00:00:00Z", "2026-10-08T00:00:00Z"),
+    row(3, null, "2026-10-09T00:00:00Z"),
+    row(4, "2026-10-05T00:00:00Z", "2026-10-11T00:00:00Z"),
+  ];
+
+  it("sorts newest first by date deleted or date created", () => {
+    expect(sortRows(rows, "date_deleted").map((r) => r.n)).toEqual([4, 1, 3, 2]);
+    // same date created: the later deletion first; no date created: last
+    expect(sortRows(rows, "date_created").map((r) => r.n)).toEqual([4, 2, 1, 3]);
+    expect(rows.map((r) => r.n)).toEqual([1, 2, 3, 4]);
   });
 });

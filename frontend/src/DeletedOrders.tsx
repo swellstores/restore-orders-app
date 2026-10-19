@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { mergeSearchPage } from './search-results';
+import { mergeSearchPage, sortRows } from './search-results';
 
 // Shapes returned by the Worker (worker/restore.ts)
 type DeletedOrderRow = {
@@ -38,13 +38,6 @@ const SORT_OPTIONS: { value: SortBy; label: string }[] = [
   { value: 'date_deleted', label: 'Date deleted' },
   { value: 'date_created', label: 'Date created' },
 ];
-
-// Newest first; rows without the date go last, ties keep the latest deletion first
-function sortRows(rows: DeletedOrderRow[], sortBy: SortBy) {
-  const time = (value: string | null) => (value ? Date.parse(value) : -Infinity);
-  return [...rows].sort((a, b) => (time(b[sortBy]) - time(a[sortBy]))
-    || (time(b.date_deleted) - time(a.date_deleted)));
-}
 
 class RequestError extends Error {
   details: unknown;

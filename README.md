@@ -79,7 +79,7 @@ models/restores.json           placeholder collection for the sidebar entry; sto
 content/restores.json          sidebar entry Orders → Restore orders, opens the frontend
 frontend/src/                  the page (React)
 frontend/worker/               the Worker: staff check, search, event, restore
-test/unit/                     vitest tests for the Worker endpoints and the page's result merging
+test/unit/                     vitest tests for the Worker endpoints and the page's result merging and sorting
 assets/                        icon and screenshots
 ```
 
@@ -89,6 +89,7 @@ From the app folder:
 
 ```sh
 npm install
+(cd frontend && npm run cf-typegen)   # once after cloning: generates the Worker types
 npm run typecheck              # app, tests and frontend
 npm test                       # vitest; reads the Swell CLI session, so run `swell login` first
 cd frontend

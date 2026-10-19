@@ -128,7 +128,7 @@ export async function searchDeletedOrders(swell: SwellClient, options: SearchOpt
     },
     fields: 'id,date_created,data.id,data.number,data.date_created,data.grand_total,data.currency,data.account_id,data.canceled,' +
       'data.shipping.name,data.shipping.first_name,data.shipping.last_name,data.billing.name,data.billing.first_name,data.billing.last_name',
-    sort: 'date_created desc',
+    sort: 'date_created desc, id desc',
     limit: EVENTS_PAGE_SIZE,
     page: options.page,
   }) as List<DeletedOrderEvent>;
