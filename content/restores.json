@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.swell.store/content.json",
+  "collection": "restores",
+  "description": "Sidebar entry that opens the app frontend to find and restore deleted orders",
+  "fields": [],
+  "label": "Restore orders",
+  "views": [
+    {
+      "id": "list",
+      "nav": {
+        "parent": "orders",
+        "label": "Restore orders",
+        "link": "frontend:///"
+      },
+      "fields": [],
+      "tabs": []
+    }
+  ]
+}

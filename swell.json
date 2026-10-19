@@ -1,0 +1,11 @@
+{
+  "description": "Find deleted orders by date and restore them",
+  "id": "restore_orders",
+  "name": "Restore orders",
+  "type": "admin",
+  "version": "1.0.0",
+  "permissions": [],
+  "frontend": {
+    "hosting": "managed"
+  }
+}

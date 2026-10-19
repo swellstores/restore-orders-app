@@ -1,0 +1,35 @@
+main { max-width: 72rem; margin: 3rem auto; padding: 0 1.5rem; }
+button { margin-block: 0.25rem; }
+button:disabled { cursor: default; opacity: 0.6; }
+.primary { background: #245bc4; color: #fff; border: 1px solid #245bc4; border-radius: 4px; }
+.search { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem; margin-bottom: 1rem; }
+.search label { display: grid; gap: 0.25rem; font-weight: 600; }
+.search label.checkbox { display: flex; align-items: center; gap: 0.5rem; font-weight: normal; padding-bottom: 0.7rem; }
+.search input[type="date"] { font: inherit; color: inherit; padding: 0.4rem 0.5rem; border: 1px solid #8a8f96; border-radius: 4px; background-color: #fff; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.toolbar p { margin: 0; }
+.toolbar-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.grid-wrap { overflow-x: auto; margin-top: 0.5rem; }
+.grid { width: 100%; border-collapse: collapse; background: #fff; font-size: 0.95rem; }
+.grid th, .grid td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #e3e7ec; text-align: left; white-space: nowrap; }
+.grid th { background: #f1f3f5; font-weight: 600; }
+.grid tbody tr { cursor: pointer; }
+.grid tbody tr:hover { background: #f5f8fd; }
+.grid tbody tr.active { background: #e8effb; }
+.grid .select { width: 1%; }
+.grid .amount { text-align: right; }
+.grid .mono { font-family: ui-monospace, monospace; font-size: 0.85rem; }
+.link { background: none; border: 0; padding: 0; margin: 0; color: #245bc4; text-decoration: underline; font: inherit; }
+.badge { margin-left: 0.5rem; padding: 0 0.4rem; border-radius: 4px; background: #e3e7ec; font-size: 0.8rem; }
+.pager { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.75rem; }
+.notice { padding: 0.5rem 1rem; border-radius: 4px; margin-bottom: 1rem; }
+.notice p { margin: 0.25rem 0; }
+.notice ul { margin: 0.25rem 0; }
+.notice-success { background: #e6f4ec; color: #1f6a3c; }
+.notice-warning { background: #fdf3e1; color: #7a4d00; }
+.error { color: #c43d24; }
+.error pre, .event pre { color: #17212b; background: #f1f3f5; padding: 0.75rem; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; font-size: 0.85rem; }
+.event { margin-top: 1.5rem; }
+.event-header { display: flex; align-items: center; justify-content: space-between; }
+.event-header h2 { margin: 0; font-size: 1.2rem; }
+.event pre { max-height: 32rem; overflow-y: auto; }
