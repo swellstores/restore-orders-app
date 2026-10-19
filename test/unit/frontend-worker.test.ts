@@ -270,7 +270,7 @@ describe("restore", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("posts each deleted order with $restore, skips existing ones and continues after failures", async () => {
+  it("posts each deleted order with $restore and no events, skips existing ones and continues after failures", async () => {
     const events: Record<string, any> = {
       [id(101)]: { id: id(101), type: "order.deleted", data: { id: id(1), number: "1001", grand_total: 5, items: [{ product_id: id(9), quantity: 1 }] } },
       [id(102)]: { id: id(102), type: "order.deleted", data: { id: id(2), number: "1002" } },
@@ -294,8 +294,8 @@ describe("restore", () => {
       { event_id: id(104), order_id: null, number: null, status: "failed", error: "Deleted order event not found" },
     ]);
     expect(calls.filter((c) => c.method === "POST").map((c) => c.body)).toEqual([
-      { ...events[id(101)].data, $restore: true },
-      { ...events[id(103)].data, $restore: true },
+      { ...events[id(101)].data, $restore: true, $events: false },
+      { ...events[id(103)].data, $restore: true, $events: false },
     ]);
   });
 });

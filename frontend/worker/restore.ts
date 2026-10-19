@@ -189,7 +189,8 @@ export async function restoreOrders(swell: SwellClient, eventIds: string[]): Pro
         results.push({ event_id: eventId, order_id: orderId, number, status: 'skipped', error: 'The order already exists' });
         continue;
       }
-      const restored = await swell.post('/orders', { ...data, $restore: true }) as { id?: string; errors?: unknown } | null;
+      const restored = await swell.post('/orders', { ...data, $restore: true, $events: false }) as
+        { id?: string; errors?: unknown } | null;
       if (!restored?.id || restored.errors) {
         throw new RestoreError(restored?.errors ? JSON.stringify(restored.errors) : 'The order was not restored');
       }
