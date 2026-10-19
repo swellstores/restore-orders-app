@@ -1,7 +1,6 @@
-import { adminEvent, adminRestore, adminSearch, json, publicContext } from './swell-server.ts';
+import { adminEvent, adminRestore, adminSearch, json } from './swell-server.ts';
 
-const routes: Record<string, { method: string; handler: (request: Request) => Promise<Response> | Response }> = {
-  '/app-api/context': { method: 'GET', handler: publicContext },
+const routes: Record<string, { method: string; handler: (request: Request) => Promise<Response> }> = {
   '/app-api/admin/search': { method: 'POST', handler: adminSearch },
   '/app-api/admin/event': { method: 'GET', handler: adminEvent },
   '/app-api/admin/restore': { method: 'POST', handler: adminRestore },

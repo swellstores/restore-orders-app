@@ -10,9 +10,10 @@ Choose **Date start** and **Date end** (both days included, in your local time z
 
 - An order that exists now (restored or never really gone) is not listed.
 - An order deleted more than once in the period is listed once, from its latest `order.deleted` event.
+- Orders without an account (empty `account_id`) are not listed.
 - **Only not canceled** hides orders that were canceled when they were deleted.
 
-The grid shows the order number, date created, date deleted, grand total, account ID and account email (when the account still exists), 10 orders per page. Click an order to see its full `order.deleted` event.
+The grid shows the order number, date created, date deleted, grand total, account ID and full name (the shipping name, or the billing name when the shipping one is empty), 10 orders per page. Orders are sorted newest first by **Date deleted** (default) or by **Date created**; choose with **Sort by** above the grid. Click an order to see its full `order.deleted` event.
 
 Deleted orders can only be found while Swell keeps their `order.deleted` events.
 

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 
 // Shapes returned by the Worker (worker/restore.ts)
 type DeletedOrderRow = {
@@ -9,8 +9,8 @@ type DeletedOrderRow = {
   date_deleted: string | null;
   grand_total: number | null;
   currency: string | null;
-  account_id: string | null;
-  account_email: string | null;
+  account_id: string;
+  name: string | null;
   canceled: boolean;
 };
 type SearchPage = { page: number; pages: number; count: number; results: DeletedOrderRow[]; done: boolean };
@@ -25,10 +25,23 @@ type RestoreResult = {
 type Query = { dateFrom: string; dateTo: string; notCanceled: boolean };
 type SearchStatus = 'idle' | 'searching' | 'done' | 'failed';
 type EventView = { eventId: string; loading: boolean; data?: unknown; error?: string };
+type SortBy = 'date_deleted' | 'date_created';
 
 const PAGE_SIZE = 10;
 // must match RESTORE_BATCH_SIZE in worker/restore.ts; the Worker rejects larger batches
 const RESTORE_BATCH_SIZE = 10;
+
+const SORT_OPTIONS: { value: SortBy; label: string }[] = [
+  { value: 'date_deleted', label: 'Date deleted' },
+  { value: 'date_created', label: 'Date created' },
+];
+
+// Newest first; rows without the date go last, ties keep the latest deletion first
+function sortRows(rows: DeletedOrderRow[], sortBy: SortBy) {
+  const time = (value: string | null) => (value ? Date.parse(value) : -Infinity);
+  return [...rows].sort((a, b) => (time(b[sortBy]) - time(a[sortBy]))
+    || (time(b.date_deleted) - time(a.date_deleted)));
+}
 
 class RequestError extends Error {
   details: unknown;
@@ -98,6 +111,7 @@ export default function DeletedOrders() {
   const [rows, setRows] = useState<DeletedOrderRow[]>([]);
   const [error, setError] = useState<{ message: string; details: unknown } | null>(null);
 
+  const [sortBy, setSortBy] = useState<SortBy>('date_deleted');
   const [gridPage, setGridPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [eventView, setEventView] = useState<EventView | null>(null);
@@ -187,7 +201,8 @@ export default function DeletedOrders() {
   }
 
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const pageRows = rows.slice((gridPage - 1) * PAGE_SIZE, gridPage * PAGE_SIZE);
+  const sortedRows = useMemo(() => sortRows(rows, sortBy), [rows, sortBy]);
+  const pageRows = sortedRows.slice((gridPage - 1) * PAGE_SIZE, gridPage * PAGE_SIZE);
   const pageSelected = pageRows.length > 0 && pageRows.every((row) => selected.has(row.event_id));
   const searching = status === 'searching';
   const busy = searching || restoring;
@@ -253,6 +268,12 @@ export default function DeletedOrders() {
           {selected.size > 0 && <> · {selected.size} selected</>}
         </p>
         <div className="toolbar-actions">
+          {rows.length > 1 && <label className="sort">
+            Sort by
+            <select value={sortBy} onChange={(event) => { setSortBy(event.target.value as SortBy); setGridPage(1); }}>
+              {SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>}
           {rows.length > 0 && selected.size < rows.length && <button type="button" onClick={() => setSelected(new Set(rows.map((row) => row.event_id)))} disabled={busy}>
             Select all {rows.length}
           </button>}
@@ -271,11 +292,11 @@ export default function DeletedOrders() {
                 <input type="checkbox" aria-label="Select orders on this page" checked={pageSelected} onChange={togglePage} disabled={busy} />
               </th>
               <th>Order number</th>
-              <th>Date created</th>
-              <th>Date deleted</th>
+              <th aria-sort={sortBy === 'date_created' ? 'descending' : undefined}>Date created{sortBy === 'date_created' && ' ↓'}</th>
+              <th aria-sort={sortBy === 'date_deleted' ? 'descending' : undefined}>Date deleted{sortBy === 'date_deleted' && ' ↓'}</th>
               <th className="amount">Grand total</th>
               <th>Account ID</th>
-              <th>Account email</th>
+              <th>Full name</th>
             </tr>
           </thead>
           <tbody>
@@ -303,7 +324,7 @@ export default function DeletedOrders() {
               <td>{formatDate(row.date_deleted)}</td>
               <td className="amount">{formatMoney(row.grand_total, row.currency)}</td>
               <td className="mono">{row.account_id}</td>
-              <td>{row.account_email}</td>
+              <td>{row.name}</td>
             </tr>)}
           </tbody>
         </table>

@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { adminEvent, adminRestore, adminSearch, publicContext } from '../worker/swell-server.ts';
+import { adminEvent, adminRestore, adminSearch } from '../worker/swell-server.ts';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 
 const origin = 'https://app.example.invalid';
 const headers = {
-  'Swell-Store-Id': 'example', 'Swell-Public-Key': 'public-fixture-key',
+  'Swell-Store-Id': 'example',
   'Swell-Admin-Url': 'https://example.swell.store',
   'Swell-API-Host': 'https://api.example.invalid',
   'Swell-Access-Token': 'private-fixture-token',
@@ -58,17 +58,6 @@ function mockPlatform(routes) {
 // Values of `prefix[$in][N]` query parameters
 const inValues = (url, prefix) => [...url.searchParams.entries()]
   .filter(([key]) => key.startsWith(`${prefix}[$in]`)).map(([, value]) => value);
-
-test('runtime context contains public fields only', async () => {
-  const result = await publicContext(get('/app-api/context')).json();
-  assert.equal(result.storeId, 'example');
-  assert(!JSON.stringify(result).includes('private-fixture-token'));
-  assert(!JSON.stringify(result).includes('api.example.invalid'));
-});
-
-test('missing runtime context explains how to enter through Swell', () => {
-  assert.equal(publicContext(new Request('http://localhost/')).status, 503);
-});
 
 for (const [name, request] of [
   ['cross-origin search', () => post('/app-api/admin/search', searchBody, { extra: { Origin: 'https://evil.example' } })],
@@ -121,36 +110,36 @@ for (const [name, body] of [
   });
 }
 
-test('search lists the latest event of each order that does not exist now, with account emails', async () => {
+test('search lists the latest event of each deleted order with an account, with its full name', async () => {
   const events = [
-    { id: id(101), date_created: '2026-10-19T10:00:00.000Z', data: { id: id(1), number: '1001', date_created: '2026-10-01T00:00:00.000Z', grand_total: 25.5, currency: 'EUR', account_id: id(51) } },
+    { id: id(101), date_created: '2026-10-19T10:00:00.000Z', data: { id: id(1), number: '1001', date_created: '2026-10-01T00:00:00.000Z', grand_total: 25.5, currency: 'EUR', account_id: id(51), shipping: { name: ' Ann Lee ' }, billing: { name: 'Billing Name' } } },
     { id: id(102), date_created: '2026-10-18T10:00:00.000Z', data: { id: id(2), number: '1002', grand_total: 10, account_id: id(52) } },
-    { id: id(103), date_created: '2026-10-17T10:00:00.000Z', data: { id: id(1), number: '1001' } },
-    { id: id(104), date_created: '2026-10-16T10:00:00.000Z', data: { id: id(3), number: '1003', canceled: true, account_id: id(53) } },
+    { id: id(103), date_created: '2026-10-17T10:00:00.000Z', data: { id: id(1), number: '1001', account_id: id(51) } },
+    { id: id(104), date_created: '2026-10-16T10:00:00.000Z', data: { id: id(3), number: '1003', canceled: true, account_id: id(53), shipping: { name: null, first_name: 'Bob', last_name: 'Stone' } } },
     { id: id(105), date_created: '2026-10-15T10:00:00.000Z', data: {} },
+    { id: id(106), date_created: '2026-10-14T10:00:00.000Z', data: { id: id(4), number: '1004', account_id: null, shipping: { name: 'No Account' } } },
+    { id: id(107), date_created: '2026-10-13T10:00:00.000Z', data: { id: id(5), number: '1005', account_id: '', shipping: { name: 'Empty Account' } } },
+    { id: id(108), date_created: '2026-10-12T10:00:00.000Z', data: { id: id(6), number: '1006', account_id: id(56), shipping: { name: '', first_name: null }, billing: { first_name: 'Cara' } } },
+    { id: id(109), date_created: '2026-10-11T10:00:00.000Z', data: { id: id(7), number: '1007', account_id: id(57) } },
   ];
   const calls = mockPlatform({
     'GET /events': () => ({ count: events.length, results: events }),
     'GET /orders': () => ({ count: 1, results: [{ id: id(2) }] }),
-    'GET /accounts': () => ({ count: 1, results: [{ id: id(51), email: 'one@example.com' }] }),
   });
   const response = await adminSearch(post('/app-api/admin/search', searchBody));
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
-  const result = await response.json();
-  assert.deepEqual(result, {
-    page: 1, pages: 1, count: 5, done: true,
+  const row = (eventId, orderId, number, dateDeleted, name, extra = {}) => ({
+    event_id: id(eventId), order_id: id(orderId), number, date_created: null, date_deleted: dateDeleted,
+    grand_total: null, currency: null, account_id: id(orderId + 50), name, canceled: false, ...extra,
+  });
+  assert.deepEqual(await response.json(), {
+    page: 1, pages: 1, count: 9, done: true,
     results: [
-      {
-        event_id: id(101), order_id: id(1), number: '1001', date_created: '2026-10-01T00:00:00.000Z',
-        date_deleted: '2026-10-19T10:00:00.000Z', grand_total: 25.5, currency: 'EUR',
-        account_id: id(51), account_email: 'one@example.com', canceled: false,
-      },
-      {
-        event_id: id(104), order_id: id(3), number: '1003', date_created: null,
-        date_deleted: '2026-10-16T10:00:00.000Z', grand_total: null, currency: null,
-        account_id: id(53), account_email: null, canceled: true,
-      },
+      row(101, 1, '1001', '2026-10-19T10:00:00.000Z', 'Ann Lee', { date_created: '2026-10-01T00:00:00.000Z', grand_total: 25.5, currency: 'EUR' }),
+      row(104, 3, '1003', '2026-10-16T10:00:00.000Z', 'Bob Stone', { canceled: true }),
+      row(108, 6, '1006', '2026-10-12T10:00:00.000Z', 'Cara'),
+      row(109, 7, '1007', '2026-10-11T10:00:00.000Z', null),
     ],
   });
 
@@ -160,8 +149,8 @@ test('search lists the latest event of each order that does not exist now, with 
   assert.equal(eventsUrl.searchParams.get('where[date_created][$lt]'), searchBody.date_to);
   assert.equal(eventsUrl.searchParams.get('where[data.canceled][$ne]'), null);
   assert.equal(eventsUrl.searchParams.get('sort'), 'date_created desc');
-  assert.deepEqual(inValues(calls.find((call) => call.path === '/orders').url, 'where[id]'), [id(1), id(2), id(3)]);
-  assert.deepEqual(inValues(calls.find((call) => call.path === '/accounts').url, 'where[id]'), [id(51), id(53)]);
+  assert.match(eventsUrl.searchParams.get('fields'), /data\.shipping\.name.*data\.billing\.last_name/);
+  assert.deepEqual(inValues(calls.find((call) => call.path === '/orders').url, 'where[id]'), [id(1), id(2), id(3), id(6), id(7)]);
 });
 
 test('search with "only not canceled" filters canceled orders in the events query', async () => {

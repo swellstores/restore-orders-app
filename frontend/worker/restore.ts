@@ -31,8 +31,8 @@ export type DeletedOrderRow = {
   date_deleted: string | null;
   grand_total: number | null;
   currency: string | null;
-  account_id: string | null;
-  account_email: string | null;
+  account_id: string;
+  name: string | null;
   canceled: boolean;
 };
 
@@ -105,21 +105,19 @@ export async function existingOrderIds(swell: SwellClient, ids: string[]): Promi
   return existing;
 }
 
-async function accountEmails(swell: SwellClient, ids: string[]): Promise<Map<string, string>> {
-  const emails = new Map<string, string>();
-  for (const batch of chunk(ids, LOOKUP_BATCH_SIZE)) {
-    const result = await swell.get('/accounts', {
-      where: { id: { $in: batch } }, fields: 'id,email', limit: batch.length,
-    }) as List<{ id: string; email?: string }>;
-    for (const account of result?.results || []) {
-      if (account.email) emails.set(account.id, account.email);
-    }
-  }
-  return emails;
+type Address = { name?: unknown; first_name?: unknown; last_name?: unknown };
+
+// Full name of an order address: its name, or first and last name
+function fullName(address: unknown): string | null {
+  if (!address || typeof address !== 'object') return null;
+  const { name, first_name: firstName, last_name: lastName } = address as Address;
+  return str(typeof name === 'string' ? name.trim() : null)
+    || str([firstName, lastName].map((part) => (typeof part === 'string' ? part.trim() : '')).filter(Boolean).join(' '));
 }
 
 // One page of `order.deleted` events in the period, newest first, reduced to orders that
-// don't exist now. Only the latest event of each order is kept; the caller dedupes across pages.
+// don't exist now and have an account. Only the latest event of each order is kept; the caller
+// dedupes across pages.
 export async function searchDeletedOrders(swell: SwellClient, options: SearchOptions): Promise<SearchPage> {
   const where: Record<string, unknown> = {
     type: 'order.deleted',
@@ -129,7 +127,8 @@ export async function searchDeletedOrders(swell: SwellClient, options: SearchOpt
 
   const events = await swell.get('/events', {
     where,
-    fields: 'id,date_created,data.id,data.number,data.date_created,data.grand_total,data.currency,data.account_id,data.canceled',
+    fields: 'id,date_created,data.id,data.number,data.date_created,data.grand_total,data.currency,data.account_id,data.canceled,' +
+      'data.shipping.name,data.shipping.first_name,data.shipping.last_name,data.billing.name,data.billing.first_name,data.billing.last_name',
     sort: 'date_created desc',
     limit: EVENTS_PAGE_SIZE,
     page: options.page,
@@ -140,17 +139,14 @@ export async function searchDeletedOrders(swell: SwellClient, options: SearchOpt
   const latest = new Map<string, DeletedOrderEvent>();
   for (const event of events?.results || []) {
     const orderId = event.data?.id;
-    if (isObjectId(orderId) && !latest.has(orderId)) latest.set(orderId, event);
+    if (isObjectId(orderId) && str(event.data?.account_id) && !latest.has(orderId)) latest.set(orderId, event);
   }
 
   const existing = await existingOrderIds(swell, [...latest.keys()]);
   const deleted = [...latest.values()].filter((event) => !existing.has(event.data!.id!));
-  const accountIds = [...new Set(deleted.map((event) => event.data!.account_id).filter(isObjectId))];
-  const emails = await accountEmails(swell, accountIds);
 
   const results = deleted.map((event): DeletedOrderRow => {
     const data = event.data!;
-    const accountId = str(data.account_id);
     return {
       event_id: event.id,
       order_id: data.id!,
@@ -159,8 +155,8 @@ export async function searchDeletedOrders(swell: SwellClient, options: SearchOpt
       date_deleted: str(event.date_created),
       grand_total: num(data.grand_total),
       currency: str(data.currency),
-      account_id: accountId,
-      account_email: (accountId && emails.get(accountId)) || null,
+      account_id: str(data.account_id)!,
+      name: fullName(data.shipping) || fullName(data.billing),
       canceled: data.canceled === true,
     };
   });

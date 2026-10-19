@@ -10,23 +10,6 @@ export function json(body: unknown, status = 200) {
   });
 }
 
-// Swell supplies these headers per request. Never embed store values at build time.
-export function publicContext(request: Request) {
-  const headers = request.headers;
-  const storeId = headers.get('Swell-Store-Id');
-  const publicKey = headers.get('Swell-Public-Key');
-  const storefrontApiOrigin = headers.get('Swell-Admin-Url');
-  if (!storeId || !publicKey || !storefrontApiOrigin) {
-    return json({ error: 'Open this frontend through swell app dev or its Swell app address.' }, 503);
-  }
-  return json({
-    storeId, publicKey, storefrontApiOrigin,
-    environmentId: headers.get('Swell-Environment-Id'),
-    appId: headers.get('Swell-App-Id'),
-    storefrontId: headers.get('Swell-Storefront-Id'),
-  });
-}
-
 type BackendContext = { storeId: string; apiHost: string; accessToken: string };
 
 // Validates the staff session against Swell and requires it to belong to the current store.
