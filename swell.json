@@ -1,39 +1,39 @@
 {
-  "description": "Find deleted orders by date and restore them",
-  "id": "restore_orders",
-  "name": "Restore orders",
-  "type": "admin",
-  "version": "1.0.0",
-  "support_email": "support@swell.is",
-  "permissions": [],
-  "frontend": {
-    "hosting": "managed"
-  },
-  "repository_url": "https://github.com/swellstores/restore-orders-app",
-  "images": [
-    {
-      "id": "deleted-orders",
-      "title": "Find deleted orders",
-      "description": "Search a period for deleted orders, keep only the ones not canceled, sort by deletion or creation date and select the ones to restore.",
-      "image_src": "assets/screenshots/1-deleted-orders.png"
-    },
-    {
-      "id": "event-data",
-      "title": "See what was deleted",
-      "description": "Click an order to see the full data of its deletion before you restore it.",
-      "image_src": "assets/screenshots/2-event-data.png"
-    },
-    {
-      "id": "canceled-orders",
-      "title": "Canceled orders too",
-      "description": "Leave Only not canceled off to list orders that were canceled when deleted, marked with a Canceled badge.",
-      "image_src": "assets/screenshots/3-canceled-orders.png"
-    },
-    {
-      "id": "restored",
-      "title": "Restore in one click",
-      "description": "Restore the selected orders with their original number and data. The page shows how many were restored and refreshes the list.",
-      "image_src": "assets/screenshots/4-restored.png"
-    }
-  ]
+	"description": "Find deleted orders by date and restore them",
+	"id": "restore_orders",
+	"name": "Restore orders",
+	"type": "admin",
+	"version": "1.0.0",
+	"support_email": "support@swell.is",
+	"permissions": [],
+	"frontend": {
+		"hosting": "managed"
+	},
+	"repository_url": "https://github.com/swellstores/restore-orders-app",
+	"images": [
+		{
+			"id": "deleted-orders",
+			"title": "Find deleted orders",
+			"description": "Search a period for deleted orders, keep only the ones not canceled, sort by deletion or creation date and select the ones to restore.",
+			"image_src": "assets/screenshots/1-deleted-orders.png"
+		},
+		{
+			"id": "event-data",
+			"title": "See what was deleted",
+			"description": "Click an order to see the full data of its deletion before you restore it.",
+			"image_src": "assets/screenshots/2-event-data.png"
+		},
+		{
+			"id": "canceled-orders",
+			"title": "Canceled orders too",
+			"description": "Leave Only not canceled off to list orders that were canceled when deleted, marked with a Canceled badge.",
+			"image_src": "assets/screenshots/3-canceled-orders.png"
+		},
+		{
+			"id": "restored",
+			"title": "Restore in one click",
+			"description": "Restore the selected orders with their original number and data. The page shows how many were restored and refreshes the list.",
+			"image_src": "assets/screenshots/4-restored.png"
+		}
+	]
 }
