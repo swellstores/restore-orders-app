@@ -21,7 +21,7 @@ deleted orders:
   listed and restored from that event only, and the filters below apply to that event. An older deletion is never
   listed instead.
 - Orders without an account (empty `account_id`) are not listed.
-- **Only not canceled** hides orders that were canceled (`canceled: true`) when they were deleted. Without it, canceled
+- **Only not canceled** (on by default) hides orders that were canceled (`canceled: true`) when they were deleted. Without it, canceled
   orders are listed with a **Canceled** badge.
 
 ### Grid

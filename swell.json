@@ -4,6 +4,7 @@
   "name": "Restore orders",
   "type": "admin",
   "version": "1.0.0",
+  "support_email": "support@swell.is",
   "permissions": [],
   "frontend": {
     "hosting": "managed"

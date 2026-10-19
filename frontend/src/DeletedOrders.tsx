@@ -107,7 +107,7 @@ export default function DeletedOrders() {
 
   const [dateFrom, setDateFrom] = useState(localDate(monthAgo));
   const [dateTo, setDateTo] = useState(localDate(today));
-  const [notCanceled, setNotCanceled] = useState(false);
+  const [notCanceled, setNotCanceled] = useState(true);
 
   const [query, setQuery] = useState<Query | null>(null);
   const [status, setStatus] = useState<SearchStatus>('idle');
