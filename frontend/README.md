@@ -9,13 +9,14 @@ The managed frontend of the Restore orders Swell app: the **Orders → Restore o
   - `GET /app-api/admin/event?id=`: the full `order.deleted` event.
   - `POST /app-api/admin/restore` `{ event_ids }`: restores up to 10 orders, skipping those that exist again; the page sends the selection in batches.
 - `worker/restore.ts`: the search and restore logic over a minimal Swell client.
+- `src/search-results.ts`: merges search pages so only the latest deletion of each order is listed.
 
 ## Develop
 
 ```sh
 npm run typecheck   # TypeScript for the page and the Worker
 npm run lint
-npm test            # Worker endpoint tests (node --test)
+npm test            # vitest suite in ../test/unit (needs `swell login`)
 npm run build       # local build; `swell app push` rebuilds anyway
 ```
 

@@ -82,7 +82,7 @@ export function parseSearchOptions(body: Record<string, unknown>): SearchOptions
 export function parseEventIds(value: unknown): string[] {
   if (!Array.isArray(value) || !value.length) throw new RestoreError('Select at least one order');
   if (value.length > RESTORE_BATCH_SIZE) throw new RestoreError(`Restore at most ${RESTORE_BATCH_SIZE} orders per request`);
-  if (!value.every(isObjectId)) throw new RestoreError('Invalid event id');
+  if (!value.every((item) => isObjectId(item))) throw new RestoreError('Invalid event id');
   return [...new Set(value)];
 }
 

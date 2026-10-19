@@ -10,7 +10,7 @@
     "preview": "npm run build && vite preview",
     "cf-typegen": "wrangler types",
     "typecheck": "tsc -b",
-    "test": "node --experimental-strip-types --test test/*.test.mjs"
+    "test": "cd .. && vitest run test/unit/frontend-worker.test.ts"
   },
   "dependencies": {
     "react": "19.3.0",

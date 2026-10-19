@@ -66,7 +66,8 @@ async function call<T>(url: string, body?: unknown): Promise<T> {
   if (!response.ok) {
     throw new RequestError(
       result.error || `Request failed with status ${response.status}`,
-      result.details ?? { status: response.status, response: text.slice(0, 2000) },
+      // a plain { error } is a message for the merchant; anything else is shown as details
+      result.details ?? (result.error ? null : { status: response.status, response: text.slice(0, 2000) }),
     );
   }
   return result as T;

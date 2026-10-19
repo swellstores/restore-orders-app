@@ -1,7 +1,7 @@
 import {
   RestoreError, getDeletedOrderEvent, isObjectId, parseEventIds, parseSearchOptions, restoreOrders, searchDeletedOrders,
   type SwellClient,
-} from './restore.ts';
+} from './restore';
 
 export function json(body: unknown, status = 200) {
   return Response.json(body, {
@@ -89,7 +89,7 @@ function backendClient({ storeId, apiHost, accessToken }: BackendContext): Swell
   const auth = btoa(`${storeId}:${accessToken}`);
   const redact = (text: string) => text.split(accessToken).join('[redacted]').split(auth).join('[redacted]');
 
-  async function request(method: 'GET' | 'POST', path: string, query?: Record<string, unknown>, body?: unknown) {
+  async function callSwell(method: 'GET' | 'POST', path: string, query?: Record<string, unknown>, body?: unknown) {
     const search = query ? stringifyQuery(query) : '';
     const response = await fetch(new URL(`${path}${search ? `?${search}` : ''}`, apiHost), {
       method,
@@ -115,8 +115,8 @@ function backendClient({ storeId, apiHost, accessToken }: BackendContext): Swell
   }
 
   return {
-    get: (path, query) => request('GET', path, query),
-    post: (path, data) => request('POST', path, undefined, data),
+    get: (path, query) => callSwell('GET', path, query),
+    post: (path, data) => callSwell('POST', path, undefined, data),
     redact,
   };
 }
