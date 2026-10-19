@@ -10,6 +10,7 @@ The managed frontend of the Restore orders Swell app: the **Orders → Restore o
   - `POST /app-api/admin/restore` `{ event_ids }`: restores up to 10 orders, skipping those that exist again; the page sends the selection in batches.
 - `worker/restore.ts`: the search and restore logic over a minimal Swell client.
 - `src/search-results.ts`: merges search pages so only the latest deletion of each order is listed, and sorts the grid.
+- `src/format.ts`: the period's day boundaries and the grid's dates and amounts, in the merchant's time zone and locale.
 
 ## Develop
 

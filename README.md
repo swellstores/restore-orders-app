@@ -50,6 +50,9 @@ Select orders with the checkboxes (the header checkbox selects the current page,
 `/orders` with `$restore: true`, which recreates it with its original id and number. Orders that exist again by then
 are skipped. A failure on one order doesn't stop the others.
 
+Restoring doesn't fire order events (`order.created`, `order.paid`, `order.submitted`), so order emails, webhooks and
+other apps aren't triggered again. Apps and webhooks that reacted to the deletion aren't told about the restore either.
+
 The page then shows how many orders were restored, lists the ones that were not with the reason, and searches again so
 restored orders leave the grid.
 

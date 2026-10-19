@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { mergeSearchPage, sortRows } from './search-results';
+import { formatDate, formatMoney, localDate, startOfDay, startOfNextDay } from './format';
 
 // Shapes returned by the Worker (worker/restore.ts)
 type DeletedOrderRow = {
@@ -64,33 +65,6 @@ async function call<T>(url: string, body?: unknown): Promise<T> {
     );
   }
   return result as T;
-}
-
-// Day boundaries in the merchant's local time zone, as ISO; the end day is included
-function startOfDay(date: string) {
-  return new Date(`${date}T00:00:00`).toISOString();
-}
-function startOfNextDay(date: string) {
-  const next = new Date(`${date}T00:00:00`);
-  next.setDate(next.getDate() + 1);
-  return next.toISOString();
-}
-
-function localDate(date: Date) {
-  return date.toLocaleDateString('en-CA');
-}
-
-function formatDate(value: string | null) {
-  return value ? new Date(value).toLocaleString() : '';
-}
-
-function formatMoney(amount: number | null, currency: string | null) {
-  if (amount === null) return '';
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'USD' }).format(amount);
-  } catch {
-    return `${amount} ${currency || ''}`.trim();
-  }
 }
 
 export default function DeletedOrders() {

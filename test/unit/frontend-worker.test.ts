@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { adminEvent, adminRestore, adminSearch } from "../../frontend/worker/swell-server";
 import { mergeSearchPage, sortRows } from "../../frontend/src/search-results";
 import worker from "../../frontend/worker/index";
+import { formatDate, formatMoney, localDate, startOfDay, startOfNextDay } from "../../frontend/src/format";
 
 // The app frontend Worker endpoints that search deleted orders, show their events and restore them for staff.
 
@@ -348,5 +349,27 @@ describe("sorting", () => {
     // same date created: the later deletion first; no date created: last
     expect(sortRows(rows, "date_created").map((r) => r.n)).toEqual([4, 2, 1, 3]);
     expect(rows.map((r) => r.n)).toEqual([1, 2, 3, 4]);
+  });
+});
+
+describe("dates and amounts", () => {
+  it("covers whole days, including the end day", () => {
+    const from = startOfDay("2026-10-19");
+    const to = startOfNextDay("2026-10-19");
+    expect(new Date(from).toISOString()).toBe(from);
+    expect(Date.parse(to) - Date.parse(from)).toBe(24 * 60 * 60 * 1000);
+    expect(startOfNextDay("2026-12-31")).toBe(startOfDay("2027-01-01"));
+  });
+
+  it("gives date inputs YYYY-MM-DD", () => {
+    expect(localDate(new Date(2026, 9, 5))).toBe("2026-10-05");
+  });
+
+  it("formats missing values as empty and unknown currencies as plain text", () => {
+    expect(formatDate(null)).toBe("");
+    expect(formatDate("2026-10-19T10:00:00.000Z")).toContain("2026");
+    expect(formatMoney(null, "USD")).toBe("");
+    expect(formatMoney(12.5, "USD")).toMatch(/12\.50/);
+    expect(formatMoney(12.5, "not a currency")).toBe("12.5 not a currency");
   });
 });
