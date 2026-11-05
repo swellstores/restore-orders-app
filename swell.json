@@ -5,6 +5,7 @@
 	"type": "admin",
 	"version": "1.0.0",
 	"support_email": "support@swell.is",
+	"documentation_url": "https://developers.swell.is/app-guides/restore-orders",
 	"permissions": [],
 	"frontend": {
 		"hosting": "managed"
@@ -14,7 +15,7 @@
 		{
 			"id": "deleted-orders",
 			"title": "Find deleted orders",
-			"description": "Search a period for deleted orders, keep only the ones not canceled, sort by deletion or creation date and select the ones to restore.",
+			"description": "Search a period for deleted orders, sort by deletion or creation date and select the ones to restore.",
 			"image_src": "assets/screenshots/1-deleted-orders.png"
 		},
 		{
@@ -26,13 +27,13 @@
 		{
 			"id": "canceled-orders",
 			"title": "Canceled orders too",
-			"description": "Leave Only not canceled off to list orders that were canceled when deleted, marked with a Canceled badge.",
+			"description": "Turn off Only not canceled to list orders that were canceled when deleted, marked with a Canceled badge.",
 			"image_src": "assets/screenshots/3-canceled-orders.png"
 		},
 		{
 			"id": "restored",
 			"title": "Restore in one click",
-			"description": "Restore the selected orders with their original number and data. The page shows how many were restored and refreshes the list.",
+			"description": "Restore the selected orders with their original number. The page shows how many were restored and refreshes the list.",
 			"image_src": "assets/screenshots/4-restored.png"
 		}
 	]
