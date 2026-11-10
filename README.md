@@ -50,8 +50,19 @@ Select orders with the checkboxes (the header checkbox selects the current page,
 `/orders` with `$restore: true`, which recreates it with its original id and number. Orders that exist again by then
 are skipped. A failure on one order doesn't stop the others.
 
-Restoring doesn't fire order events (`order.created`, `order.paid`, `order.submitted`), so order emails, webhooks and
-other apps aren't triggered again. Apps and webhooks that reacted to the deletion aren't told about the restore either.
+Restoring doesn't fire order events (`order.created`, `order.paid`, `order.submitted`), so order emails and webhooks
+aren't sent again. Apps and webhooks that reacted to the deletion aren't told about the restore either.
+
+Functions that installed apps run before or after an order is created still run on a restored order. Such a function
+can change the order as it's written, and one that runs before can reject it; the order is then listed as not restored
+with the reason.
+
+The restored order is written as it was, without the processing a new order gets:
+
+- Its channel and attribution (where the order came from) aren't restored, since they can only be set when an order is
+  created; the restored order has none.
+- Nothing is recalculated: the order keeps its saved totals, and the customer's order count and totals and any related
+  subscription's totals aren't updated for it.
 
 The page then shows how many orders were restored, lists the ones that were not with the reason, and searches again so
 restored orders leave the grid.

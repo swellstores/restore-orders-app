@@ -34,4 +34,4 @@ button:disabled { cursor: default; opacity: 0.6; }
 .event-header h2 { margin: 0; font-size: 1.2rem; }
 .event pre { max-height: 32rem; overflow-y: auto; }
 .sort { display: flex; align-items: center; gap: 0.5rem; }
-.sort select { font: inherit; color: inherit; padding: 0.4rem 0.5rem; border: 1px solid #8a8f96; border-radius: 4px; background-color: #fff; }
+.sort select { font: inherit; color: inherit; padding: 0.4rem 2rem 0.4rem 0.5rem; border: 1px solid #8a8f96; border-radius: 4px; appearance: none; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2317212b' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 0.65rem center; }

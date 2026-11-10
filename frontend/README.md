@@ -28,4 +28,5 @@ Deploy with `swell app push` from the app root. Do not deploy directly to Cloudf
 - Backend credentials come from Swell request headers at request time and stay in the Worker. Never expose them to the browser or put store values in the build.
 - Protected endpoints validate `_swell_admin_session` against Swell and only accept same-origin JSON for mutations.
 - Frontend endpoints live under `/app-api`; Swell owns `/api`, `/functions` and other platform paths.
+- The Worker's console output reaches no log the merchant or Swell can read: return failures to the page (`{ error, details }`), which shows them under **Error details**.
 - Keep `dist/` and `.wrangler/` out of git: builds write local absolute paths into them.

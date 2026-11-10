@@ -38,7 +38,6 @@ async function authorizeStaff(request: Request): Promise<BackendContext | Respon
     }
   } catch (err) {
     const details = { step: 'validate admin session', exception: err instanceof Error ? `${err.name}: ${err.message}` : String(err) };
-    console.error('Restore orders: session check threw', details);
     return json({ error: 'Unable to complete the platform request', details }, 502);
   }
   return { storeId, apiHost, accessToken };
@@ -132,7 +131,6 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
 function failure(err: unknown, swell: { redact(text: string): string } | null, step: string, extra: Record<string, unknown> = {}) {
   // our own errors (invalid input, not found) are messages for the merchant
   if (err instanceof RestoreError) return json({ error: err.message }, err.status);
-  const status = 502;
   let details: Record<string, unknown> = { step, ...extra };
   if (err instanceof BackendError) {
     details = { ...err.details, ...extra };
@@ -142,8 +140,8 @@ function failure(err: unknown, swell: { redact(text: string): string } | null, s
   const redact = swell ? swell.redact : (text: string) => text;
   const message = redact(err instanceof Error ? err.message : String(err)) || 'Request failed';
   details = JSON.parse(redact(JSON.stringify(details)));
-  if (status >= 500) console.error(`Restore orders: ${step} failed`, { message, details });
-  return json({ error: message, details }, status);
+  // The Worker's console output reaches no log the merchant or Swell can read, so the page shows the details
+  return json({ error: message, details }, 502);
 }
 
 // One page of deleted orders for a period.
