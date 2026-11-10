@@ -46,7 +46,7 @@ Click an order to see its full `order.deleted` event below the grid; click it ag
 ### Restore
 
 Select orders with the checkboxes (the header checkbox selects the current page, **Select all** selects every result,
-**Clear selection** clears it) and click **Restore**. For each order the app posts the order data from its event to
+**Clear selection** clears it) and click **Restore**, then confirm. For each order the app posts the order data from its event to
 `/orders` with `$restore: true`, which recreates it with its original id and number. Orders that exist again by then
 are skipped. A failure on one order doesn't stop the others.
 
@@ -64,13 +64,24 @@ The restored order is written as it was, without the processing a new order gets
 - Nothing is recalculated: the order keeps its saved totals, and the customer's order count and totals and any related
   subscription's totals aren't updated for it.
 
+The page sends the selection in batches and shows the progress. Keep it open until restoring finishes: closing it
+stops the batches that haven't been sent, and the browser asks before leaving. Orders already restored stay restored,
+and restoring the rest again skips them.
+
 The page then shows how many orders were restored, lists the ones that were not with the reason, and searches again so
 restored orders leave the grid.
 
 ### Access
 
-Any staff user of the store who can open the app in the dashboard can search and restore. The app's endpoints check the
-dashboard session with Swell on every request, and accept restore and search requests only from the app's own page.
+Access follows the user's access to orders in the store: their role's **Orders** level, or, for users without a role,
+their permissions list.
+
+- **Manage** or **Full** (or Orders in the permissions list, or full permissions): search and restore.
+- **View**: search and see events, but not restore. The page says so and has no **Restore** button.
+- **No access** (or no Orders in the permissions list): the page shows an error and nothing can be searched.
+
+The app's endpoints check the dashboard session and the user's access with Swell on every request, and accept restore
+and search requests only from the app's own page.
 
 ## Settings
 

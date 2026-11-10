@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { adminEvent, adminRestore, adminSearch } from "../../frontend/worker/swell-server";
+import { adminAccess, adminEvent, adminRestore, adminSearch, ordersAccess } from "../../frontend/worker/swell-server";
 import { mergeSearchPage, sortRows } from "../../frontend/src/search-results";
 import worker from "../../frontend/worker/index";
 import { formatDate, formatMoney, localDate, startOfDay, startOfNextDay } from "../../frontend/src/format";
@@ -46,8 +46,8 @@ type Call = { method: string; path: string; url: URL; body: any };
 type Route = (url: URL, body: any) => unknown;
 
 // Routes mocked platform calls as "METHOD /path"; handlers get the URL and the parsed body.
-// The staff session is valid.
-function mockPlatform(routes: Record<string, Route>) {
+// The staff session is valid; `user` is the dashboard's user record, by default one without a role or permissions list.
+function mockPlatform(routes: Record<string, Route>, user: unknown = {}) {
   const calls: Call[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init: RequestInit = {}) => {
     const url = new URL(String(input));
@@ -59,6 +59,10 @@ function mockPlatform(routes: Record<string, Route>) {
     if (method === "GET" && url.pathname === "/admin/api/session") {
       expect(requestHeaders["X-Session"]).toBe("fixture");
       return Response.json({ user_id: "staff", client_id: "example" });
+    }
+    if (method === "GET" && url.pathname === "/admin/api/user") {
+      expect(requestHeaders["X-Session"]).toBe("fixture");
+      return Response.json(user);
     }
     expect(requestHeaders.Authorization).toBe(`Basic ${btoa("example:private-fixture-token")}`);
     const route = routes[`${method} ${url.pathname}`];
@@ -103,6 +107,57 @@ describe("access", () => {
       expect(init?.redirect).toBe("manual");
       return new Response(null, { status: 302, headers: { Location: "https://untrusted.example" } });
     });
+    expect((await adminSearch(post("/app-api/admin/search", searchBody))).status).toBe(401);
+  });
+});
+
+describe("access to orders", () => {
+  const role = (orders?: string) => ({ role: { permissions: orders ? { orders, products: "full" } : { products: "view" } } });
+
+  it("follows the role's Orders level, or the permissions list without a role", () => {
+    expect(ordersAccess(role("full"))).toBe("full");
+    expect(ordersAccess(role("manage"))).toBe("full");
+    expect(ordersAccess(role("view"))).toBe("view");
+    expect(ordersAccess(role("restrict"))).toBe("none");
+    expect(ordersAccess(role())).toBe("full");
+    expect(ordersAccess({})).toBe("full");
+    expect(ordersAccess({ all_permissions: true, permissions: [] })).toBe("full");
+    expect(ordersAccess({ permissions: ["products", "orders"] })).toBe("full");
+    expect(ordersAccess({ permissions: ["products"] })).toBe("none");
+  });
+
+  it("tells the page the user's access", async () => {
+    mockPlatform({}, role("view"));
+    expect(await (await adminAccess(get("/app-api/admin/access"))).json()).toEqual({ orders: "view" });
+  });
+
+  it("refuses every endpoint to a user without access to orders, before reading store data", async () => {
+    const calls = mockPlatform({}, { permissions: ["products"] });
+    for (const response of [
+      await adminAccess(get("/app-api/admin/access")),
+      await adminSearch(post("/app-api/admin/search", searchBody)),
+      await adminEvent(get(`/app-api/admin/event?id=${id(1)}`)),
+      await adminRestore(post("/app-api/admin/restore", { event_ids: [id(101)] })),
+    ]) {
+      expect(response.status).toBe(403);
+      expect((await response.json() as { error: string }).error).toMatch(/don't have access to orders/);
+    }
+    expect(calls.every((c) => c.path.startsWith("/admin/api/"))).toBe(true);
+  });
+
+  it("lets a user who can only view orders search but not restore", async () => {
+    const calls = mockPlatform({
+      "GET /events": () => ({ count: 0, page: 1, pages: 1, results: [] }),
+    }, role("view"));
+    expect((await adminSearch(post("/app-api/admin/search", searchBody))).status).toBe(200);
+    const response = await adminRestore(post("/app-api/admin/restore", { event_ids: [id(101)] }));
+    expect(response.status).toBe(403);
+    expect((await response.json() as { error: string }).error).toMatch(/only view orders/);
+    expect(calls.some((c) => c.path.startsWith("/events/") || c.method === "POST")).toBe(false);
+  });
+
+  it("rejects a session without a user", async () => {
+    mockPlatform({}, null);
     expect((await adminSearch(post("/app-api/admin/search", searchBody))).status).toBe(401);
   });
 });

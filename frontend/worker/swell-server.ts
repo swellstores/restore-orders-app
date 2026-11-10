@@ -11,9 +11,33 @@ export function json(body: unknown, status = 200) {
 }
 
 type BackendContext = { storeId: string; apiHost: string; accessToken: string };
+export type OrdersAccess = 'full' | 'view' | 'none';
+type StaffContext = BackendContext & { ordersAccess: OrdersAccess };
 
-// Validates the staff session against Swell and requires it to belong to the current store.
-async function authorizeStaff(request: Request): Promise<BackendContext | Response> {
+type StaffUser = {
+  role?: { permissions?: Record<string, string> } | null;
+  all_permissions?: boolean;
+  permissions?: string[] | null;
+};
+
+// The user's access to orders, by the dashboard's rule: their role's Orders level (No access, View, Manage or Full),
+// or without a role their permissions list. Neither means full access.
+export function ordersAccess(user: StaffUser): OrdersAccess {
+  const role = user.role?.permissions;
+  if (role) {
+    if (role.orders === 'restrict') return 'none';
+    return role.orders === 'view' ? 'view' : 'full';
+  }
+  if (user.all_permissions || !user.permissions) return 'full';
+  return user.permissions.includes('orders') ? 'full' : 'none';
+}
+
+const NO_ORDERS_ACCESS = "You don't have access to orders in this store. Ask the store owner to give you access to orders.";
+const VIEW_ORDERS_ONLY = 'You can only view orders in this store, so you can\'t restore them. Ask the store owner to give you Manage or Full access to orders.';
+
+// Validates the staff session against Swell, requires it to belong to the current store and reads the user's access
+// to orders. A user without access to orders gets an error.
+async function authorizeStaff(request: Request): Promise<StaffContext | Response> {
   const cookie = (request.headers.get('Cookie') || '').split(';')
     .map((part) => part.trim()).find((part) => part.startsWith('_swell_admin_session='));
   let sessionId;
@@ -28,19 +52,25 @@ async function authorizeStaff(request: Request): Promise<BackendContext | Respon
   if (!storeId || !adminUrl || !apiHost || !accessToken) {
     return json({ error: 'Swell request context is unavailable' }, 503);
   }
+  let user: StaffUser | null;
   try {
-    const sessionResponse = await fetch(new URL('/admin/api/session', adminUrl), {
-      headers: { 'X-Session': sessionId }, redirect: 'manual',
-    });
+    const admin = (path: string) => fetch(new URL(path, adminUrl), { headers: { 'X-Session': sessionId }, redirect: 'manual' });
+    const sessionResponse = await admin('/admin/api/session');
     const session = sessionResponse.ok ? await sessionResponse.json() as { user_id?: string; client_id?: string } : null;
     if (!session?.user_id || session.client_id !== storeId) {
       return json({ error: 'Unauthorized' }, 401);
     }
+    // The dashboard's user record carries the role and permissions the user has in this store
+    const userResponse = await admin('/admin/api/user');
+    user = userResponse.ok ? await userResponse.json() as StaffUser | null : null;
   } catch (err) {
     const details = { step: 'validate admin session', exception: err instanceof Error ? `${err.name}: ${err.message}` : String(err) };
     return json({ error: 'Unable to complete the platform request', details }, 502);
   }
-  return { storeId, apiHost, accessToken };
+  if (!user) return json({ error: 'Unauthorized' }, 401);
+  const access = ordersAccess(user);
+  if (access === 'none') return json({ error: NO_ORDERS_ACCESS }, 403);
+  return { storeId, apiHost, accessToken, ordersAccess: access };
 }
 
 // CSRF protection for cookie-authenticated mutations: same-origin JSON requests only.
@@ -144,8 +174,14 @@ function failure(err: unknown, swell: { redact(text: string): string } | null, s
   return json({ error: message, details }, 502);
 }
 
-// One page of deleted orders for a period.
-// Any validated staff session for this store may search and restore.
+// The signed-in user's access to orders, so the page can tell a user who can only view orders that they can't restore.
+export async function adminAccess(request: Request) {
+  const context = await authorizeStaff(request);
+  if (context instanceof Response) return context;
+  return json({ orders: context.ordersAccess });
+}
+
+// One page of deleted orders for a period. Staff with any access to orders may search.
 export async function adminSearch(request: Request) {
   if (!isSameOriginJson(request)) return json({ error: 'Forbidden' }, 403);
   let options;
@@ -177,7 +213,7 @@ export async function adminEvent(request: Request) {
   }
 }
 
-// Restore the orders of up to RESTORE_BATCH_SIZE `order.deleted` events.
+// Restore the orders of up to RESTORE_BATCH_SIZE `order.deleted` events. Needs Manage or Full access to orders.
 export async function adminRestore(request: Request) {
   if (!isSameOriginJson(request)) return json({ error: 'Forbidden' }, 403);
   let eventIds;
@@ -186,6 +222,7 @@ export async function adminRestore(request: Request) {
 
   const context = await authorizeStaff(request);
   if (context instanceof Response) return context;
+  if (context.ordersAccess !== 'full') return json({ error: VIEW_ORDERS_ONLY }, 403);
   const swell = backendClient(context);
   try {
     const results = (await restoreOrders(swell, eventIds))

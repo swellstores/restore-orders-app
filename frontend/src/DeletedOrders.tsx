@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { mergeSearchPage, sortRows } from './search-results';
 import { formatDate, formatMoney, localDate, startOfDay, startOfNextDay } from './format';
 
@@ -30,6 +30,8 @@ type Query = { dateFrom: string; dateTo: string; notCanceled: boolean };
 type SearchStatus = 'idle' | 'searching' | 'done' | 'failed';
 type EventView = { eventId: string; loading: boolean; data?: unknown; error?: string };
 type SortBy = 'date_deleted' | 'date_created';
+// The user's access to orders (worker/swell-server.ts): 'full' covers Manage and Full
+type OrdersAccess = 'full' | 'view' | 'none';
 
 const PAGE_SIZE = 10;
 // must match RESTORE_BATCH_SIZE in worker/restore.ts; the Worker rejects larger batches
@@ -87,8 +89,32 @@ export default function DeletedOrders() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [eventView, setEventView] = useState<EventView | null>(null);
 
+  const [access, setAccess] = useState<OrdersAccess | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [restoreProgress, setRestoreProgress] = useState({ done: 0, total: 0 });
   const [restoreResults, setRestoreResults] = useState<RestoreResult[] | null>(null);
+
+  // Users without access to orders get the error before they search; users who can only view orders can search but not restore
+  useEffect(() => {
+    call<{ orders: OrdersAccess }>('/app-api/admin/access')
+      .then((result) => setAccess(result.orders))
+      .catch((err) => {
+        setAccess('none');
+        setError({
+          message: err instanceof Error ? err.message : 'Unable to check your access to orders',
+          details: err instanceof RequestError ? err.details : String(err),
+        });
+      });
+  }, []);
+
+  // Orders are sent in batches from this page: closing it stops the batches that aren't sent yet
+  useEffect(() => {
+    if (!restoring) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [restoring]);
 
   // Reads all pages of deleted events for the query; an order deleted more than once is decided by its latest event.
   async function search(next: Query) {
@@ -129,6 +155,7 @@ export default function DeletedOrders() {
     setRestoreResults(null);
     setEventView(null);
     setSelected(new Set());
+    setConfirming(false);
     setGridPage(1);
     void search({ dateFrom, dateTo, notCanceled });
   };
@@ -148,7 +175,9 @@ export default function DeletedOrders() {
   async function restore() {
     const eventIds = rows.filter((row) => selected.has(row.event_id)).map((row) => row.event_id);
     if (!eventIds.length || !query) return;
+    setConfirming(false);
     setRestoring(true);
+    setRestoreProgress({ done: 0, total: eventIds.length });
     setRestoreResults(null);
     const results: RestoreResult[] = [];
     for (let i = 0; i < eventIds.length; i += RESTORE_BATCH_SIZE) {
@@ -162,6 +191,7 @@ export default function DeletedOrders() {
           results.push({ event_id: eventId, order_id: row?.order_id ?? null, number: row?.number ?? null, status: 'failed', error: message });
         }
       }
+      setRestoreProgress({ done: results.length, total: eventIds.length });
     }
     setRestoreResults(results);
     setSelected(new Set());
@@ -175,7 +205,8 @@ export default function DeletedOrders() {
   const pageRows = sortedRows.slice((gridPage - 1) * PAGE_SIZE, gridPage * PAGE_SIZE);
   const pageSelected = pageRows.length > 0 && pageRows.every((row) => selected.has(row.event_id));
   const searching = status === 'searching';
-  const busy = searching || restoring;
+  const busy = searching || restoring || confirming;
+  const canRestore = access === 'full';
 
   const toggle = (eventId: string) => setSelected((current) => {
     const next = new Set(current);
@@ -207,8 +238,16 @@ export default function DeletedOrders() {
         <input type="checkbox" checked={notCanceled} onChange={(event) => setNotCanceled(event.target.checked)} />
         Only not canceled
       </label>
-      <button type="submit" className="primary" disabled={busy || !dateFrom || !dateTo || dateFrom > dateTo}>Search</button>
+      <button type="submit" className="primary" disabled={busy || access === null || access === 'none' || !dateFrom || !dateTo || dateFrom > dateTo}>Search</button>
     </form>
+
+    {access === 'view' && <div className="notice notice-warning" role="status">
+      <p>You can only view orders in this store, so you can search deleted orders but not restore them. Ask the store owner to give you Manage or Full access to orders.</p>
+    </div>}
+
+    {restoring && <p role="status">
+      Restoring {restoreProgress.done} of {restoreProgress.total}… Keep this page open until it finishes.
+    </p>}
 
     {searching && <p role="status">
       Searching{progress.pages > 1 ? ` · events page ${progress.page} of ${progress.pages}` : '…'}
@@ -248,11 +287,24 @@ export default function DeletedOrders() {
             Select all {rows.length}
           </button>}
           {selected.size > 0 && <button type="button" onClick={() => setSelected(new Set())} disabled={busy}>Clear selection</button>}
-          <button type="button" className="primary" onClick={() => void restore()} disabled={busy || selected.size === 0}>
+          {canRestore && <button type="button" className="primary" onClick={() => setConfirming(true)} disabled={busy || selected.size === 0}>
             {restoring ? 'Restoring…' : `Restore${selected.size ? ` ${selected.size}` : ''}`}
-          </button>
+          </button>}
         </div>
       </div>
+
+      {confirming && <div className="notice notice-warning confirm" role="alertdialog" aria-label="Confirm restore">
+        <p>
+          Restore {selected.size} {selected.size === 1 ? 'order' : 'orders'}? Each order is created again with its original
+          id, number and data. Order emails and webhooks aren't sent, but apps' functions for new orders run.
+        </p>
+        <div className="confirm-actions">
+          <button type="button" className="primary" onClick={() => void restore()}>
+            Restore {selected.size} {selected.size === 1 ? 'order' : 'orders'}
+          </button>
+          <button type="button" onClick={() => setConfirming(false)}>Cancel</button>
+        </div>
+      </div>}
 
       {rows.length > 0 && <div className="grid-wrap">
         <table className="grid">

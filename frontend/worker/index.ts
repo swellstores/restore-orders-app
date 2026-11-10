@@ -1,6 +1,7 @@
-import { adminEvent, adminRestore, adminSearch, json } from './swell-server';
+import { adminAccess, adminEvent, adminRestore, adminSearch, json } from './swell-server';
 
 const routes: Record<string, { method: string; handler: (request: Request) => Promise<Response> }> = {
+  '/app-api/admin/access': { method: 'GET', handler: adminAccess },
   '/app-api/admin/search': { method: 'POST', handler: adminSearch },
   '/app-api/admin/event': { method: 'GET', handler: adminEvent },
   '/app-api/admin/restore': { method: 'POST', handler: adminRestore },
