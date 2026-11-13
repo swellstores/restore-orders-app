@@ -4,7 +4,7 @@ The managed frontend of the Restore orders Swell app: the **Orders → Restore o
 
 - `src/DeletedOrders.tsx`: the page. Search form, grid with selection, sorting by date deleted or date created and 10-row pages, event data panel, restore and its result.
 - `worker/index.ts`: routes `/app-api/*` requests; everything else is served from the built assets.
-- `worker/swell-server.ts`: validates the staff session (and, for POST, a same-origin JSON request) and reads the user's access to orders from `/admin/api/user` (role's Orders level, or the permissions list without a role; no access is refused with 403), then runs one fixed operation:
+- `worker/swell-server.ts`: validates the staff session (and, for POST, a same-origin JSON request) and reads the user's access to orders from `/admin/api/user` and the store plan from `/admin/api/account/plan` (on plans with roles, the role's Orders level, admins and users without a role having full access; otherwise the permissions list; no access is refused with 403), then runs one fixed operation:
   - `GET /app-api/admin/access`: the user's access to orders, `full` (Manage or Full) or `view`; the page uses it to hide **Restore**.
   - `POST /app-api/admin/search` `{ date_from, date_to, not_canceled, page }`: one page of 1000 `order.deleted` events, reduced to the latest deletion of each order, kept when it has an account and the order doesn't exist now, with the shipping (or billing) full name. `order_ids` lists every order on the page so the page skips older deletions on later pages (`src/search-results.ts`). The page calls it until `done`.
   - `GET /app-api/admin/event?id=`: the full `order.deleted` event.

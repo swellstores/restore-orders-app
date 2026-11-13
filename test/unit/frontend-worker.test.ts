@@ -47,7 +47,8 @@ type Route = (url: URL, body: any) => unknown;
 
 // Routes mocked platform calls as "METHOD /path"; handlers get the URL and the parsed body.
 // The staff session is valid; `user` is the dashboard's user record, by default one without a role or permissions list.
-function mockPlatform(routes: Record<string, Route>, user: unknown = {}) {
+// `roles` is whether the store's plan has user roles (advanced_user_permissions); by default it does.
+function mockPlatform(routes: Record<string, Route>, user: unknown = {}, roles = true) {
   const calls: Call[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init: RequestInit = {}) => {
     const url = new URL(String(input));
@@ -63,6 +64,10 @@ function mockPlatform(routes: Record<string, Route>, user: unknown = {}) {
     if (method === "GET" && url.pathname === "/admin/api/user") {
       expect(requestHeaders["X-Session"]).toBe("fixture");
       return Response.json(user);
+    }
+    if (method === "GET" && url.pathname === "/admin/api/account/plan") {
+      expect(requestHeaders["X-Session"]).toBe("fixture");
+      return Response.json({ metadata: { features: { advanced_user_permissions: roles } } });
     }
     expect(requestHeaders.Authorization).toBe(`Basic ${btoa("example:private-fixture-token")}`);
     const route = routes[`${method} ${url.pathname}`];
@@ -114,16 +119,45 @@ describe("access", () => {
 describe("access to orders", () => {
   const role = (orders?: string) => ({ role: { permissions: orders ? { orders, products: "full" } : { products: "view" } } });
 
-  it("follows the role's Orders level, or the permissions list without a role", () => {
-    expect(ordersAccess(role("full"))).toBe("full");
-    expect(ordersAccess(role("manage"))).toBe("full");
-    expect(ordersAccess(role("view"))).toBe("view");
-    expect(ordersAccess(role("restrict"))).toBe("none");
-    expect(ordersAccess(role())).toBe("full");
-    expect(ordersAccess({})).toBe("full");
-    expect(ordersAccess({ all_permissions: true, permissions: [] })).toBe("full");
-    expect(ordersAccess({ permissions: ["products", "orders"] })).toBe("full");
-    expect(ordersAccess({ permissions: ["products"] })).toBe("none");
+  it("on plans with roles, follows the role's Orders level; admins and users without a role have full access", () => {
+    expect(ordersAccess(role("full"), true)).toBe("full");
+    expect(ordersAccess(role("manage"), true)).toBe("full");
+    expect(ordersAccess(role("view"), true)).toBe("view");
+    expect(ordersAccess(role("restrict"), true)).toBe("none");
+    expect(ordersAccess(role(), true)).toBe("full");
+    // like the dashboard, the permissions list doesn't apply on plans with roles
+    expect(ordersAccess({ permissions: ["products"] }, true)).toBe("full");
+    expect(ordersAccess({ role: "admin", permissions: ["products"] }, true)).toBe("full");
+    expect(ordersAccess({ role: { type: "admin", permissions: { orders: "restrict" } } }, true)).toBe("full");
+  });
+
+  it("on plans without roles, ignores any role and follows the permissions list", () => {
+    expect(ordersAccess({}, false)).toBe("full");
+    expect(ordersAccess({ all_permissions: true, permissions: [] }, false)).toBe("full");
+    expect(ordersAccess({ permissions: ["products", "orders"] }, false)).toBe("full");
+    expect(ordersAccess({ permissions: ["products"] }, false)).toBe("none");
+    // a role left over after a downgrade
+    expect(ordersAccess({ ...role("restrict"), permissions: ["orders"] }, false)).toBe("full");
+    expect(ordersAccess({ ...role("full"), permissions: ["products"] }, false)).toBe("none");
+  });
+
+  it("reads whether roles apply from the store's plan", async () => {
+    const user = { ...role("view"), permissions: ["products"] };
+    mockPlatform({}, user, true);
+    expect(await (await adminAccess(get("/app-api/admin/access"))).json()).toEqual({ orders: "view" });
+    vi.restoreAllMocks();
+    mockPlatform({}, user, false);
+    expect((await adminAccess(get("/app-api/admin/access"))).status).toBe(403);
+  });
+
+  it("fails with 502 when the store plan can't be read", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = new URL(String(input)).pathname;
+      if (path === "/admin/api/session") return Response.json({ user_id: "staff", client_id: "example" });
+      if (path === "/admin/api/user") return Response.json({});
+      return new Response("Bad gateway", { status: 502 });
+    });
+    expect((await adminAccess(get("/app-api/admin/access"))).status).toBe(502);
   });
 
   it("tells the page the user's access", async () => {
@@ -132,7 +166,7 @@ describe("access to orders", () => {
   });
 
   it("refuses every endpoint to a user without access to orders, before reading store data", async () => {
-    const calls = mockPlatform({}, { permissions: ["products"] });
+    const calls = mockPlatform({}, role("restrict"));
     for (const response of [
       await adminAccess(get("/app-api/admin/access")),
       await adminSearch(post("/app-api/admin/search", searchBody)),

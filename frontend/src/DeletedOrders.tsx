@@ -44,9 +44,12 @@ const SORT_OPTIONS: { value: SortBy; label: string }[] = [
 
 class RequestError extends Error {
   details: unknown;
-  constructor(message: string, details: unknown) {
+  // HTTP status of the failed response
+  status: number;
+  constructor(message: string, details: unknown, status: number) {
     super(message);
     this.details = details;
+    this.status = status;
   }
 }
 
@@ -64,6 +67,7 @@ async function call<T>(url: string, body?: unknown): Promise<T> {
       result.error || `Request failed with status ${response.status}`,
       // a plain { error } is a message for the merchant; anything else is shown as details
       result.details ?? (result.error ? null : { status: response.status, response: text.slice(0, 2000) }),
+      response.status,
     );
   }
   return result as T;
@@ -90,25 +94,33 @@ export default function DeletedOrders() {
   const [eventView, setEventView] = useState<EventView | null>(null);
 
   const [access, setAccess] = useState<OrdersAccess | null>(null);
+  // the access check failed for another reason than a refusal (e.g. a 502), so the page offers to check again
+  const [accessFailed, setAccessFailed] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [restoreProgress, setRestoreProgress] = useState({ done: 0, total: 0 });
   const [restoreResults, setRestoreResults] = useState<RestoreResult[] | null>(null);
 
-  // Users without access to orders get the error before they search; users who can only view orders can search but not restore
-  useEffect(() => {
-    call<{ orders: OrdersAccess }>('/app-api/admin/access')
-      .then((result) => setAccess(result.orders))
-      .catch((err) => {
-        setAccess('none');
-        setError({
-          message: err instanceof Error ? err.message : 'Unable to check your access to orders',
-          details: err instanceof RequestError ? err.details : String(err),
-        });
+  // Users without access to orders get the error before they search; users who can only view orders can search but not restore.
+  // Only a refusal (403) locks the page; any other failure can be checked again with Try again.
+  async function checkAccess() {
+    setAccessFailed(false);
+    setError(null);
+    try {
+      setAccess((await call<{ orders: OrdersAccess }>('/app-api/admin/access')).orders);
+    } catch (err) {
+      if (err instanceof RequestError && err.status === 403) setAccess('none');
+      else setAccessFailed(true);
+      setError({
+        message: err instanceof Error ? err.message : 'Unable to check your access to orders',
+        details: err instanceof RequestError ? err.details : String(err),
       });
-  }, []);
+    }
+  }
+  useEffect(() => { void checkAccess(); }, []);
 
-  // Orders are sent in batches from this page: closing it stops the batches that aren't sent yet
+  // Orders are sent in batches from this page. beforeunload only covers closing or reloading the tab: opening another
+  // dashboard page removes the app's iframe without it, so the page also shows a warning while restoring.
   useEffect(() => {
     if (!restoring) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
@@ -245,9 +257,13 @@ export default function DeletedOrders() {
       <p>You can only view orders in this store, so you can search deleted orders but not restore them. Ask the store owner to give you Manage or Full access to orders.</p>
     </div>}
 
-    {restoring && <p role="status">
-      Restoring {restoreProgress.done} of {restoreProgress.total}… Keep this page open until it finishes.
-    </p>}
+    {restoring && <div className="notice notice-warning" role="status">
+      <p>Restoring {restoreProgress.done} of {restoreProgress.total}…</p>
+      <p>
+        Stay on this page until it finishes: opening another dashboard page or closing it stops restoring. Orders
+        already restored stay restored; restore the rest again to continue.
+      </p>
+    </div>}
 
     {searching && <p role="status">
       Searching{progress.pages > 1 ? ` · events page ${progress.page} of ${progress.pages}` : '…'}
@@ -264,6 +280,7 @@ export default function DeletedOrders() {
 
     {error && <div className="error" role="alert">
       <p>{error.message}</p>
+      {accessFailed && <button type="button" onClick={() => void checkAccess()}>Try again</button>}
       {error.details != null && <details open>
         <summary>Error details</summary>
         <pre>{JSON.stringify(error.details, null, 2)}</pre>
@@ -296,7 +313,8 @@ export default function DeletedOrders() {
       {confirming && <div className="notice notice-warning confirm" role="alertdialog" aria-label="Confirm restore">
         <p>
           Restore {selected.size} {selected.size === 1 ? 'order' : 'orders'}? Each order is created again with its original
-          id, number and data. Order emails and webhooks aren't sent, but apps' functions for new orders run.
+          ID, number and data. Order emails, webhooks and apps that react to new-order events aren't triggered; app
+          functions that run as an order is saved still run.
         </p>
         <div className="confirm-actions">
           <button type="button" className="primary" onClick={() => void restore()}>

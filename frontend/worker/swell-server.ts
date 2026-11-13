@@ -15,18 +15,22 @@ export type OrdersAccess = 'full' | 'view' | 'none';
 type StaffContext = BackendContext & { ordersAccess: OrdersAccess };
 
 type StaffUser = {
-  role?: { permissions?: Record<string, string> } | null;
+  // a role record, or 'admin' for legacy admins
+  role?: { type?: string; permissions?: Record<string, string> } | string | null;
   all_permissions?: boolean;
   permissions?: string[] | null;
 };
 
-// The user's access to orders, by the dashboard's rule: their role's Orders level (No access, View, Manage or Full),
-// or without a role their permissions list. Neither means full access.
-export function ordersAccess(user: StaffUser): OrdersAccess {
-  const role = user.role?.permissions;
-  if (role) {
-    if (role.orders === 'restrict') return 'none';
-    return role.orders === 'view' ? 'view' : 'full';
+// The user's access to orders, by the classic dashboard's rule (hasPermission in swell-admin):
+// - Plans with roles (advanced_user_permissions): admins and users without a role have full access; otherwise the role's
+//   Orders level decides (No access, shown as Restrict in the classic dashboard, View, Manage or Full).
+// - Other plans ignore roles: full permissions, no permissions list, or Orders in the list mean full access.
+export function ordersAccess(user: StaffUser, rolesEnabled: boolean): OrdersAccess {
+  if (rolesEnabled) {
+    const role = user.role;
+    if (role === 'admin' || typeof role !== 'object' || !role || role.type === 'admin' || !role.permissions) return 'full';
+    if (role.permissions.orders === 'restrict') return 'none';
+    return role.permissions.orders === 'view' ? 'view' : 'full';
   }
   if (user.all_permissions || !user.permissions) return 'full';
   return user.permissions.includes('orders') ? 'full' : 'none';
@@ -53,6 +57,7 @@ async function authorizeStaff(request: Request): Promise<StaffContext | Response
     return json({ error: 'Swell request context is unavailable' }, 503);
   }
   let user: StaffUser | null;
+  let rolesEnabled = false;
   try {
     const admin = (path: string) => fetch(new URL(path, adminUrl), { headers: { 'X-Session': sessionId }, redirect: 'manual' });
     const sessionResponse = await admin('/admin/api/session');
@@ -60,15 +65,21 @@ async function authorizeStaff(request: Request): Promise<StaffContext | Response
     if (!session?.user_id || session.client_id !== storeId) {
       return json({ error: 'Unauthorized' }, 401);
     }
-    // The dashboard's user record carries the role and permissions the user has in this store
-    const userResponse = await admin('/admin/api/user');
+    // The dashboard's user record carries the role and permissions the user has in this store; the store's plan says
+    // whether roles apply (the dashboard reads the same plan at start)
+    const [userResponse, planResponse] = await Promise.all([admin('/admin/api/user'), admin('/admin/api/account/plan')]);
     user = userResponse.ok ? await userResponse.json() as StaffUser | null : null;
+    if (user && !planResponse.ok) {
+      return json({ error: 'Unable to read the store plan', details: { step: 'read store plan', status: planResponse.status } }, 502);
+    }
+    const plan = user ? await planResponse.json() as { metadata?: { features?: Record<string, unknown> } } | null : null;
+    rolesEnabled = Boolean(plan?.metadata?.features?.advanced_user_permissions);
   } catch (err) {
     const details = { step: 'validate admin session', exception: err instanceof Error ? `${err.name}: ${err.message}` : String(err) };
     return json({ error: 'Unable to complete the platform request', details }, 502);
   }
   if (!user) return json({ error: 'Unauthorized' }, 401);
-  const access = ordersAccess(user);
+  const access = ordersAccess(user, rolesEnabled);
   if (access === 'none') return json({ error: NO_ORDERS_ACCESS }, 403);
   return { storeId, apiHost, accessToken, ordersAccess: access };
 }

@@ -64,21 +64,29 @@ The restored order is written as it was, without the processing a new order gets
 - Nothing is recalculated: the order keeps its saved totals, and the customer's order count and totals and any related
   subscription's totals aren't updated for it.
 
-The page sends the selection in batches and shows the progress. Keep it open until restoring finishes: closing it
-stops the batches that haven't been sent, and the browser asks before leaving. Orders already restored stay restored,
-and restoring the rest again skips them.
+The page sends the selection in batches and shows the progress. Stay on it until restoring finishes: opening another
+dashboard page or closing it stops the batches that haven't been sent. The page warns about this while restoring, and
+the browser asks before closing or reloading the tab; it can't ask when another dashboard page is opened. Orders already
+restored stay restored, and restoring the rest again skips them.
 
 The page then shows how many orders were restored, lists the ones that were not with the reason, and searches again so
 restored orders leave the grid.
 
 ### Access
 
-Access follows the user's access to orders in the store: their role's **Orders** level, or, for users without a role,
-their permissions list.
+Access follows the user's access to orders in the dashboard:
+
+- On plans with user roles, the role's **Orders** level decides. Admins and users without a role have full access.
+- On other plans, roles don't apply, and the user's permissions list decides: full permissions, or Orders in the list.
+
+What the user can do:
 
 - **Manage** or **Full** (or Orders in the permissions list, or full permissions): search and restore.
 - **View**: search and see events, but not restore. The page says so and has no **Restore** button.
-- **No access** (or no Orders in the permissions list): the page shows an error and nothing can be searched.
+- **No access** (**Restrict** in the classic dashboard), or no Orders in the permissions list: the page shows an error
+  and nothing can be searched.
+
+If the access check itself fails (for example, Swell doesn't answer), the page shows the error with **Try again**.
 
 The app's endpoints check the dashboard session and the user's access with Swell on every request, and accept restore
 and search requests only from the app's own page.
