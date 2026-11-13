@@ -3,7 +3,7 @@
 	"id": "restore_orders",
 	"name": "Restore orders",
 	"type": "admin",
-	"version": "1.0.2",
+	"version": "1.0.3",
 	"support_email": "support@swell.is",
 	"documentation_url": "https://developers.swell.is/app-guides/restore-orders",
 	"permissions": [],
@@ -32,8 +32,8 @@
 		},
 		{
 			"id": "restored",
-			"title": "Restore in one click",
-			"description": "Restore the selected orders with their original number. The page shows how many were restored and refreshes the list.",
+			"title": "Restore what you choose",
+			"description": "Confirm the selected orders to restore them with their original number. The page shows how many were restored and refreshes the list.",
 			"image_src": "assets/screenshots/4-restored.png"
 		}
 	]
