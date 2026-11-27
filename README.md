@@ -131,3 +131,7 @@ npm run build                  # local build; `swell app push` rebuilds anyway
 ```
 
 Deploy to the test environment with `swell app push` from the app folder.
+
+## License
+
+MIT. See [LICENSE](LICENSE). Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
